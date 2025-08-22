@@ -28,7 +28,6 @@ class BASE_EXPORT_FOR_DEVTOOL QuickjsContextWrapper : public piper::JSIContext {
   static RegisterWasmFuncType& RegisterWasmFunc();
 
   static RegisterWasmFuncType register_wasm_func_;
-
  private:
   LEPUSContext* ctx_;
 };

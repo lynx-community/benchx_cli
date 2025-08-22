@@ -104,19 +104,6 @@ void QuickjsRuntimeInstance::InitQuickjsRuntime(bool is_sync,
   if (is_sync) {
     AddToIdContainer();
   }
-#if LYNX_ENABLE_FROZEN_MODE
-  // Due to the fact that QuickJS’s GC traverses all objects in a Stop The World
-  // fashion to try to free the circular objects, it causes extra time
-  // consumption once QuickJS triggers GC. Currently, the default GC threshold
-  // of QuickJS is 256 bytes, and even a slight change in the JS Framework may
-  // cause changes in the GC timing. The impact is that in performance
-  // degradation tests, some indicators may experience significant fluctuations
-  // due to changes in the GC timing. To avoid the GC from fluctuating the
-  // performance, when LYNX_ENABLE_FROZEN_MODE is enabled, set the GC of the JS
-  // QuickJSRuntime to INT_MAX. In the long run, a reasonable GC threshold needs
-  // to be set for QuickJS.
-  LEPUS_SetGCThreshold(rt_, INT_MAX);
-#endif
   LOGI("lynx InitQuickjsRuntime success");
 }
 

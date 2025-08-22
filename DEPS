@@ -244,12 +244,25 @@ deps = {
         "type": "git",
         "url": "https://github.com/lynx-family/primjs.git",
         "commit": "b6338cf6378afaaa628d4f1977934d87e30e9ee6",
+        "patches": os.path.join(root_dir, 'patches', 'quickjs', '*.patch'),
         "ignore_in_git": True,
     },
     "third_party/debug_router/src": {
         'type': 'git',
         'url': 'https://github.com/lynx-family/debug-router.git',
         'commit': '031a44bc1b1fffc6a001a1245dda41b977316062',
+        "ignore_in_git": True,
+    },
+    "third_party/codspeed-instrument-hooks/instrument-hooks": {
+        'type': 'git',
+        'url': 'https://github.com/CodSpeedHQ/instrument-hooks.git',
+        'commit': 'a9ae7a4d897dbb694cb0355c9994141a7c4a1ab9',
+        "ignore_in_git": True,
+    },
+    "third_party/argparse/src": {
+        'type': 'git',
+        'url': 'https://github.com/p-ranav/argparse',
+        'commit': '3eda91b2e1ce7d569f84ba295507c4cd8fd96910',
         "ignore_in_git": True,
     },
     'buildtools/corepack/pnpm/7.33.6': {

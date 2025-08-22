@@ -389,13 +389,22 @@ void TaskRunnerManufactor::PostTaskToConcurrentLoop(base::closure task,
                                                     ConcurrentTaskType type) {
   switch (type) {
     case ConcurrentTaskType::HIGH_PRIORITY: {
+#if LYNX_ENABLE_FROZEN_MODE
+      GetConcurrentLoopHighPriorityWorkerCount(); // ensure use
+      base::UIThread::GetRunner()->PostTask(std::move(task));
+#else
       static base::NoDestructor<fml::ConcurrentMessageLoop> high_priority_loop(
           "LynxHighTask", fml::Thread::ThreadPriority::HIGH,
           GetConcurrentLoopHighPriorityWorkerCount());
       high_priority_loop->PostTask(std::move(task));
+#endif
     } break;
     case ConcurrentTaskType::NORMAL_PRIORITY: {
+#if LYNX_ENABLE_FROZEN_MODE
+      base::UIThread::GetRunner()->PostTask(std::move(task));
+#else
       GetNormalPriorityLoop().PostTask(std::move(task));
+#endif
     } break;
   }
 }
