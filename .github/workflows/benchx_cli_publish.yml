@@ -1,0 +1,155 @@
+name: Benchx CLI Publish
+
+on:
+  pull_request:
+    branches:
+      - develop
+  push:
+    tags:
+      - '*'
+  workflow_call:
+    inputs:
+      skip_release:
+        description: 'Skip the release job'
+        required: false
+        default: false
+        type: boolean
+      commit_ref:
+        description: 'Commit SHA or branch name to build'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os_name }} ${{ matrix.arch_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            os_name: Linux
+            arch_name: x86_64
+          - os: macos-latest
+            os_name: Darwin
+            arch_name: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_ref || github.ref }}
+          fetch-depth: 0
+
+      - name: Restore Timestamps
+        uses: chetan/git-restore-mtime-action@v2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Dependencies
+        run: |
+          uv venv
+
+          uv pip install pip
+
+          # Ensure tools are executable
+          chmod +x tools/hab || true
+
+          # Source envsetup to set paths for hab and other tools
+          set +u
+          source tools/envsetup.sh
+
+          echo "Syncing dependencies..."
+          tools/hab sync .
+
+      - name: Cache Build Output
+        uses: actions/cache@v4
+        with:
+          path: out/Default
+          key: ${{ matrix.os }}-${{ matrix.arch_name }}-build-out-${{ github.sha }}
+          restore-keys: |
+            ${{ matrix.os }}-${{ matrix.arch_name }}-build-out-
+
+      - name: Build
+        run: |
+          set +u
+          source tools/envsetup.sh
+
+          echo "Generating build files for ${{ matrix.os_name }} ${{ matrix.arch_name }}..."
+
+          # Base args
+          ARGS='enable_unittests=true enable_trace="perfetto" jsengine_type="quickjs" enable_frozen_mode=true'
+
+          # Platform specific args
+          if [[ "${{ matrix.os_name }}" == "Darwin" ]]; then
+            ARGS="$ARGS use_flutter_cxx=false"
+          fi
+
+          # Note: If cross-compilation is needed for arm64 on Linux, target_cpu arg would be needed
+          # But here we are running on native runners (macos-latest is arm64, others x64)
+
+          echo "GN Args: $ARGS"
+          gn gen --args="$ARGS" out/Default
+
+          echo "Building benchx_cli..."
+          ninja -d explain -v -C out/Default cli/benchx:benchx_cli
+
+      - name: Prepare and Package Artifacts
+        run: |
+          mkdir -p dist/bin
+          BINARY_PATH="out/Default/benchx_cli"
+
+          if [ ! -f "$BINARY_PATH" ]; then
+            echo "Error: Binary not found at $BINARY_PATH"
+            ls -R out/Default
+            exit 1
+          fi
+
+          echo "Found binary at $BINARY_PATH"
+          cp "$BINARY_PATH" dist/bin/benchx_cli
+
+          # Create archive with specific naming format: benchx_cli_OS_Arch.tar.gz
+          # e.g., benchx_cli_Darwin_arm64.tar.gz
+          ARCHIVE_NAME="benchx_cli_${{ matrix.os_name }}_${{ matrix.arch_name }}.tar.gz"
+
+          cd dist/bin
+          tar -czvf "../../$ARCHIVE_NAME" benchx_cli
+          cd ../..
+
+          echo "Created archive: $ARCHIVE_NAME"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact-${{ matrix.os_name }}-${{ matrix.arch_name }}
+          path: benchx_cli_*.tar.gz
+
+  release:
+    name: Create Release
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && !inputs.skip_release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true # Merge all artifacts into one directory
+
+      - name: List Artifacts
+        run: |
+          ls -R artifacts
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
