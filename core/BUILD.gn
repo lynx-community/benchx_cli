@@ -162,6 +162,10 @@ config("lynx_public_config") {
       ]
     }
   }
+
+  if (enable_frozen_mode) {
+    defines += [ "LYNX_ENABLE_FROZEN_MODE=true" ]
+  }
 }
 
 config("config") {
