@@ -114,7 +114,8 @@ deps = {
         "url": "https://github.com/lynx-family/buildroot.git",
         "commit": "917b38180c78da016b1023436d5b568ca5402bee",
         "ignore_in_git": True,
-        "condition": system in ['linux', 'darwin', 'windows']
+        "condition": system in ['linux', 'darwin', 'windows'],
+        "patches": os.path.join(root_dir, 'patches', 'build', '*.patch'),
     },
     "build/linux/debian_sid_amd64-sysroot": {
         "type": "http",
@@ -202,6 +203,7 @@ deps = {
         "url": "https://github.com/lynx-family/primjs.git",
         "commit": "326c293afcc7566f188e57182342a17b2291babb",
         "ignore_in_git": True,
+        "patches": os.path.join(root_dir, 'patches', 'quickjs', '*.patch'),
     },
     "third_party/debug_router/src": {
         'type': 'git',
@@ -253,6 +255,18 @@ deps = {
         "function": unzip_webview2,
         "require": ["third_party/webview2/webview2.nupkg"],
         "condition": system in ['windows']
+    },
+    "third_party/codspeed-instrument-hooks/instrument-hooks": {
+        'type': 'git',
+        'url': 'https://github.com/CodSpeedHQ/instrument-hooks.git',
+        'commit': 'a9ae7a4d897dbb694cb0355c9994141a7c4a1ab9',
+        "ignore_in_git": True,
+    },
+    "third_party/argparse/src": {
+        'type': 'git',
+        'url': 'https://github.com/p-ranav/argparse',
+        'commit': '3eda91b2e1ce7d569f84ba295507c4cd8fd96910',
+        "ignore_in_git": True,
     },
     'buildtools/corepack/pnpm/7.33.6': {
         "type": "http",
