@@ -144,3 +144,8 @@ js_libraries/lynx-core/src/common/feature.ts
 /tools/api/android
 /tools/api/ios
 /tools/api/docs/gen
+
+compile_commands.json
+.cache/
+
+.codspeed_*/
