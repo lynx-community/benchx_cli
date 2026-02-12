@@ -55,12 +55,22 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install Dependencies
+      - name: Configure sccache
         run: |
-          # Configure sccache
+          # Configure sccache directory before cache step
           echo "SCCACHE_DIR=$GITHUB_WORKSPACE/.sccache" >> $GITHUB_ENV
           mkdir -p .sccache
 
+      - name: Cache sccache
+        uses: actions/cache@v4
+        with:
+          path: .sccache
+          key: ${{ matrix.os }}-${{ matrix.arch_name }}-sccache-${{ github.sha }}
+          restore-keys: |
+            ${{ matrix.os }}-${{ matrix.arch_name }}-sccache-
+
+      - name: Install Dependencies
+        run: |
           # Show sccache stats before build
           sccache -z
 
@@ -76,14 +86,6 @@ jobs:
 
           echo "Syncing dependencies..."
           tools/hab sync .
-
-      - name: Cache sccache
-        uses: actions/cache@v4
-        with:
-          path: .sccache
-          key: ${{ matrix.os }}-${{ matrix.arch_name }}-sccache-${{ github.sha }}
-          restore-keys: |
-            ${{ matrix.os }}-${{ matrix.arch_name }}-sccache-
 
       - name: Build
         run: |
