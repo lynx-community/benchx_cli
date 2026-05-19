@@ -407,7 +407,11 @@ fml::Thread TaskRunnerManufactor::CreateJSWorkerThread(
 
 void TaskRunnerManufactor::PostTaskToConcurrentLoop(base::closure task,
                                                     ConcurrentTaskType type) {
+#if LYNX_ENABLE_FROZEN_MODE
+  base::UIThread::GetRunner()->PostTask(std::move(task));
+#else
   GetConcurrentLoop(type).PostTask(std::move(task));
+#endif
 }
 
 bool TaskRunnerManufactor::IsOnConcurrentLoopWorker(ConcurrentTaskType type) {
