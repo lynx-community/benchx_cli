@@ -29,7 +29,6 @@ class LYNX_EXPORT_FOR_DEVTOOL QuickjsContextWrapper : public JSIContext {
   static RegisterWasmFuncType& RegisterWasmFunc();
 
   static RegisterWasmFuncType register_wasm_func_;
-
  private:
   LEPUSContext* ctx_;
 };
