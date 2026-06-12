@@ -86,8 +86,11 @@ jobs:
 
           echo "Generating build files for ${{ matrix.os_name }} ${{ matrix.arch_name }}..."
 
-          # Base args
-          ARGS='enable_unittests=true enable_trace="perfetto" jsengine_type="quickjs" enable_frozen_mode=true use_sccache=true'
+          # Base args. symbol_level=1 keeps function/line debug info (enough for
+          # CodSpeed walltime flame graphs) while shrinking the DWARF; the full
+          # symbol_level=2 build (~45MB .debug_info) appears to overwhelm
+          # CodSpeed's perf symbol harvest ("failed to harvest language frames").
+          ARGS='enable_unittests=true enable_trace="perfetto" jsengine_type="quickjs" enable_frozen_mode=true use_sccache=true symbol_level=1'
 
 
           # Platform specific args
