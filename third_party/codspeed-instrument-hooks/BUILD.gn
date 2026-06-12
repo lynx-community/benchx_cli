@@ -20,5 +20,13 @@ config("codspeed_instrument_hooks_config") {
 source_set("codspeed-instrument-hooks") {
   configs += [ ":codspeed_instrument_hooks_config" ]
   public_configs = [":codspeed_instrument_hooks_public_config"]
-  sources = [ "instrument-hooks/dist/core.c" ]
+  # The prebuilt dist/core.c is generated for Linux (it references
+  # __errno_location, openat64, malloc_usable_size) and does not link on macOS.
+  # Walltime profiling only runs on the Linux CI runner, so compile it there
+  # only; performance_apis.cc stubs the hooks out on macOS.
+  if (is_mac) {
+    sources = []
+  } else {
+    sources = [ "instrument-hooks/dist/core.c" ]
+  }
 }
