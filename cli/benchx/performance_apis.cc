@@ -116,8 +116,9 @@ struct State {
   // first time it runs — to keep a flame graph without flooding the runner with
   // IPC on every fire (tinybench fires a region thousands of times per run).
   // Mirrors codspeed-cpp's IsFirstRepetition gating.
-  std::set<std::string> profiled_uris;  // uris that already got a profile window
+  std::set<std::string> profiled_uris;  // start-uris that already got a window
   bool profiling = false;               // a profiler window is currently open
+  std::string profiling_uri;            // start-uri of the open window
 };
 
 inline State& state() {
@@ -314,9 +315,10 @@ LEPUSValue perf_start_benchmark(LEPUSContext* ctx, LEPUSValueConst this_val,
       const char* uri = LEPUS_ToCStringLen2(ctx, &len, argv[0], 0);
       if (uri != nullptr) {
         auto& s = codspeed_walltime::state();
-        if (s.profiled_uris.find(std::string(uri, len)) ==
-            s.profiled_uris.end()) {
+        std::string uri_str(uri, len);
+        if (s.profiled_uris.find(uri_str) == s.profiled_uris.end()) {
           s.profiling = true;
+          s.profiling_uri = std::move(uri_str);
           instrument_hooks_start_benchmark(g_hooks);
         }
         if (!LEPUS_IsGCMode(ctx)) {
@@ -364,7 +366,9 @@ LEPUSValue perf_set_executed_benchmark(LEPUSContext* ctx,
       instrument_hooks_set_executed_benchmark(g_hooks,
                                               static_cast<int32_t>(::getpid()),
                                               str);
-      s.profiled_uris.insert(uri);
+      // Dedupe on the start-uri (which gated the window); the executed uri may
+      // differ (e.g. componentAtIndex resolves reuse/create only post-run).
+      s.profiled_uris.insert(s.profiling_uri);
       s.profiling = false;
     }
   }
