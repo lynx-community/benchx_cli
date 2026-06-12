@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -110,6 +111,14 @@ struct State {
   double pending_ns = 0;
   std::map<std::string, std::vector<double>> samples;  // uri -> round times (ns)
   std::map<std::string, long> warmup_iters;            // uri -> discarded rounds
+  // Execution-profile bookkeeping: the runner samples (perf) between the
+  // instrument-hooks start/stop, so we open exactly ONE window per uri — the
+  // first time it runs — to keep a flame graph without flooding the runner with
+  // IPC on every fire (tinybench fires a region thousands of times per run).
+  // Mirrors codspeed-cpp's IsFirstRepetition gating.
+  std::set<std::string> profiled_uris;  // start-uris that already got a window
+  bool profiling = false;               // a profiler window is currently open
+  std::string profiling_uri;            // start-uri of the open window
 };
 
 inline State& state() {
@@ -296,10 +305,26 @@ LEPUSValue perf_start_benchmark(LEPUSContext* ctx, LEPUSValueConst this_val,
     callgrind_zero_stats();
     callgrind_start_instrumentation();
   } else if (is_walltime) {
-    // Open the profiler window first so its overhead stays outside the timed
-    // region recorded by begin().
-    if (g_hooks != nullptr) {
-      instrument_hooks_start_benchmark(g_hooks);
+    // Open a profiler window only for the first occurrence of each uri (the JS
+    // harness passes the uri as argv[0]). Opening it on every fire would flood
+    // the runner with IPC. Done before begin() so its overhead stays outside
+    // the timed region.
+    if (g_hooks != nullptr && argc > 0) {
+      HandleScope scope(ctx);
+      size_t len;
+      const char* uri = LEPUS_ToCStringLen2(ctx, &len, argv[0], 0);
+      if (uri != nullptr) {
+        auto& s = codspeed_walltime::state();
+        std::string uri_str(uri, len);
+        if (s.profiled_uris.find(uri_str) == s.profiled_uris.end()) {
+          s.profiling = true;
+          s.profiling_uri = std::move(uri_str);
+          instrument_hooks_start_benchmark(g_hooks);
+        }
+        if (!LEPUS_IsGCMode(ctx)) {
+          LEPUS_FreeCString(ctx, uri);
+        }
+      }
     }
     codspeed_walltime::begin();
   }
@@ -313,7 +338,7 @@ LEPUSValue perf_stop_benchmark(LEPUSContext* ctx, LEPUSValueConst this_val,
   } else if (is_walltime) {
     // Close the timed region before the profiler window, symmetric to start.
     codspeed_walltime::end();
-    if (g_hooks != nullptr) {
+    if (g_hooks != nullptr && codspeed_walltime::state().profiling) {
       instrument_hooks_stop_benchmark(g_hooks);
     }
   }
@@ -331,13 +356,20 @@ LEPUSValue perf_set_executed_benchmark(LEPUSContext* ctx,
   if (is_running_on_valgrind) {
     callgrind_dump_stats_at((const uint8_t*)str);
   } else if (is_walltime) {
-    codspeed_walltime::commit(std::string(str, len));
-    // Tell the runner which benchmark the just-closed profiler window belongs
-    // to, so the execution profile is attached to this uri.
-    if (g_hooks != nullptr) {
+    const std::string uri(str, len);
+    codspeed_walltime::commit(uri);
+    // Only finalize a profile if we actually opened a window for this uri (its
+    // first occurrence). Attaching it here marks the uri done so later
+    // occurrences are timed but not re-profiled.
+    auto& s = codspeed_walltime::state();
+    if (g_hooks != nullptr && s.profiling) {
       instrument_hooks_set_executed_benchmark(g_hooks,
                                               static_cast<int32_t>(::getpid()),
                                               str);
+      // Dedupe on the start-uri (which gated the window); the executed uri may
+      // differ (e.g. componentAtIndex resolves reuse/create only post-run).
+      s.profiled_uris.insert(s.profiling_uri);
+      s.profiling = false;
     }
   }
   if (!LEPUS_IsGCMode(ctx)) {
@@ -364,7 +396,7 @@ LEPUSValue perf_now(LEPUSContext* ctx, LEPUSValueConst this_val, int argc,
 }
 
 static const LEPUSCFunctionListEntry codspeed_funcs[] = {
-    LEPUS_CFUNC_DEF("startBenchmark", 0, perf_start_benchmark),
+    LEPUS_CFUNC_DEF("startBenchmark", 1, perf_start_benchmark),
     LEPUS_CFUNC_DEF("stopBenchmark", 0, perf_stop_benchmark),
     LEPUS_CFUNC_DEF("setExecutedBenchmark", 1, perf_set_executed_benchmark),
     LEPUS_CFUNC_DEF("zeroStats", 1, perf_zero_stats),
