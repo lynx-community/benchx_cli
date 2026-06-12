@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <map>
@@ -19,6 +20,19 @@ extern "C" {
 #include "callgrind.h"
 #include "quickjs/include/quickjs.h"
 #include "valgrind.h"
+
+// CodSpeed instrument-hooks (third_party/codspeed-instrument-hooks). We
+// forward-declare the few symbols we use instead of including core.h, because
+// that header also re-declares callgrind_start/stop_instrumentation() with a
+// different return type than the local wrappers below, which would collide.
+typedef uint64_t* InstrumentHooks;
+InstrumentHooks* instrument_hooks_init(void);
+int8_t instrument_hooks_start_benchmark(InstrumentHooks*);
+int8_t instrument_hooks_stop_benchmark(InstrumentHooks*);
+int8_t instrument_hooks_set_executed_benchmark(InstrumentHooks*, int32_t pid,
+                                               const char* uri);
+int8_t instrument_hooks_set_integration(InstrumentHooks*, const char* name,
+                                        const char* version);
 }
 
 // clang-format off
@@ -217,12 +231,25 @@ inline void write_results() {
 
 }  // namespace codspeed_walltime
 
+// CodSpeed instrument-hooks handle. In walltime mode it connects to the runner
+// over its socket so that, while a benchmarked region is open, the runner runs
+// `perf` and builds an execution profile (flame graph). Timing still comes from
+// the file-protocol writer above; instrument-hooks only adds the profiling
+// signal (this mirrors @codspeed/vitest-plugin, which both writes walltime
+// results and wraps the run with InstrumentHooks). nullptr when not running
+// under the runner, in which case every call below is a no-op.
+static InstrumentHooks* g_hooks = nullptr;
+
 static bool is_walltime = []() {
   const char* mode = std::getenv("CODSPEED_RUNNER_MODE");
   const bool on = mode != nullptr && std::string(mode) == "walltime";
   if (on) {
     codspeed_walltime::state().enabled = true;
     std::atexit(codspeed_walltime::write_results);
+    g_hooks = instrument_hooks_init();
+    if (g_hooks != nullptr) {
+      instrument_hooks_set_integration(g_hooks, "benchx_cli", "1.0.0");
+    }
   }
   return on;
 }();
@@ -241,6 +268,11 @@ LEPUSValue perf_start_benchmark(LEPUSContext* ctx, LEPUSValueConst this_val,
     callgrind_zero_stats();
     callgrind_start_instrumentation();
   } else if (is_walltime) {
+    // Open the profiler window first so its overhead stays outside the timed
+    // region recorded by begin().
+    if (g_hooks != nullptr) {
+      instrument_hooks_start_benchmark(g_hooks);
+    }
     codspeed_walltime::begin();
   }
   return LEPUS_UNDEFINED;
@@ -251,7 +283,11 @@ LEPUSValue perf_stop_benchmark(LEPUSContext* ctx, LEPUSValueConst this_val,
   if (is_running_on_valgrind) {
     callgrind_stop_instrumentation();
   } else if (is_walltime) {
+    // Close the timed region before the profiler window, symmetric to start.
     codspeed_walltime::end();
+    if (g_hooks != nullptr) {
+      instrument_hooks_stop_benchmark(g_hooks);
+    }
   }
   return LEPUS_UNDEFINED;
 }
@@ -268,6 +304,13 @@ LEPUSValue perf_set_executed_benchmark(LEPUSContext* ctx,
     callgrind_dump_stats_at((const uint8_t*)str);
   } else if (is_walltime) {
     codspeed_walltime::commit(std::string(str, len));
+    // Tell the runner which benchmark the just-closed profiler window belongs
+    // to, so the execution profile is attached to this uri.
+    if (g_hooks != nullptr) {
+      instrument_hooks_set_executed_benchmark(g_hooks,
+                                              static_cast<int32_t>(::getpid()),
+                                              str);
+    }
   }
   if (!LEPUS_IsGCMode(ctx)) {
     LEPUS_FreeCString(ctx, str);

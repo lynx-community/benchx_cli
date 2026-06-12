@@ -20,5 +20,5 @@ config("codspeed_instrument_hooks_config") {
 source_set("codspeed-instrument-hooks") {
   configs += [ ":codspeed_instrument_hooks_config" ]
   public_configs = [":codspeed_instrument_hooks_public_config"]
-  sources = []
+  sources = [ "instrument-hooks/dist/core.c" ]
 }
