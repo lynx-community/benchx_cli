@@ -285,7 +285,11 @@ static bool is_walltime = []() {
     std::atexit(codspeed_walltime::write_results);
     g_hooks = instrument_hooks_init();
     if (g_hooks != nullptr) {
-      instrument_hooks_set_integration(g_hooks, "benchx_cli", "1.0.0");
+      // Declare the C++ integration name so CodSpeed harvests native (C++)
+      // language frames for the flame graph; an unknown integration name leaves
+      // it unable to resolve the profiling trace ("failed to harvest language
+      // frames"). benchx_cli is a native C++ binary, so this is accurate.
+      instrument_hooks_set_integration(g_hooks, "codspeed-cpp", "1.0.0");
     }
   }
   return on;
