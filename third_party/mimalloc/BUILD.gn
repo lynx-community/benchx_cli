@@ -1,0 +1,31 @@
+# Copyright 2024 The Lynx Authors. All rights reserved.
+# Licensed under the Apache License Version 2.0 that can be found in the
+# LICENSE file in the root directory of this source tree.
+
+import("../../config.gni")
+
+config("mimalloc_public_config") {
+  include_dirs = [ "mimalloc/include" ]
+}
+
+config("mimalloc_private_config") {
+  # mimalloc builds the whole allocator from a single amalgamation unit
+  # (src/static.c #includes the other src/*.c). It is third-party code, so
+  # silence its warnings instead of patching them.
+  cflags = [
+    "-Wno-unused-function",
+    "-Wno-unused-variable",
+    "-Wno-unknown-pragmas",
+    "-Wno-unused-but-set-variable",
+  ]
+}
+
+# A source_set (not a static_library) so every object is linked unconditionally
+# into the final executable. That matters for an allocator override: the strong
+# malloc/free symbols mimalloc defines must be present in the link, otherwise the
+# linker could drop them and glibc's (weak) symbols would win.
+source_set("mimalloc") {
+  public_configs = [ ":mimalloc_public_config" ]
+  configs += [ ":mimalloc_private_config" ]
+  sources = [ "mimalloc/src/static.c" ]
+}
