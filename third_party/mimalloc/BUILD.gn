@@ -20,7 +20,14 @@ config("mimalloc_private_config") {
   # mimalloc builds the whole allocator from a single amalgamation unit
   # (src/static.c #includes the other src/*.c). It is third-party code, so
   # silence its warnings instead of patching them.
+  #
+  # -Wno-typedef-redefinition: mimalloc targets C11, which allows repeating an
+  # identical typedef; the toolchain compiles .c files as -std=c99 (see
+  # build/config/compiler/BUILD.gn), where that trips -Wtypedef-redefinition and
+  # -Werror. Suppressing it matches the existing precedent in
+  # patches/vulkan-loader (same warning, same fix).
   cflags = [
+    "-Wno-typedef-redefinition",
     "-Wno-unused-function",
     "-Wno-unused-variable",
     "-Wno-unknown-pragmas",
