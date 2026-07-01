@@ -17,6 +17,20 @@ config("mimalloc_private_config") {
   # mirror it here since we compile static.c directly.
   defines = [ "MI_MALLOC_OVERRIDE=1" ]
 
+  if (is_mac) {
+    # On Linux a strong `malloc` in the executable shadows glibc's weak one
+    # process-wide. macOS uses a two-level namespace, so a plain definition only
+    # affects the executable's own code — dylib-internal allocations still hit
+    # libSystem. Register mimalloc as the default malloc zone (MI_OSX_ZONE) and
+    # dyld-interpose the allocation symbols (MI_OSX_INTERPOSE) so the override
+    # covers the whole image. Both mirror mimalloc's CMake defaults on Apple;
+    # static.c pulls in prim/osx/alloc-override-zone.c when MI_OSX_ZONE is set.
+    defines += [
+      "MI_OSX_ZONE=1",
+      "MI_OSX_INTERPOSE=1",
+    ]
+  }
+
   # mimalloc builds the whole allocator from a single amalgamation unit
   # (src/static.c #includes the other src/*.c). It is third-party code, so
   # silence its warnings instead of patching them.
