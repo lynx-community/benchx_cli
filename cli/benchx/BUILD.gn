@@ -5,14 +5,6 @@
 import("//core/Lynx.gni")
 import("//testing/test.gni")
 
-declare_args() {
-  # Link mimalloc into benchx_cli to override the system allocator. This cuts
-  # allocator-induced timing variance in the CodSpeed benchmarks (e.g. the
-  # glibc malloc_consolidate spikes that show up in simulation profiles).
-  # Windows override needs the mimalloc redirect DLL, so keep it off there.
-  benchx_use_mimalloc = !is_win
-}
-
 executable("benchx_cli") {
   testonly = true
   sources = [
@@ -37,9 +29,10 @@ executable("benchx_cli") {
     "//js_libraries/lynx-core",
     "//third_party/argparse",
     "//third_party/codspeed-instrument-hooks",
+    # mimalloc overrides the system allocator to cut allocator-induced timing
+    # variance in the CodSpeed benchmarks (e.g. glibc malloc_consolidate spikes
+    # in simulation profiles). Benchmarks only run on Linux/macOS.
+    "//third_party/mimalloc",
     "//third_party/rapidjson",
   ]
-  if (benchx_use_mimalloc) {
-    deps += [ "//third_party/mimalloc" ]
-  }
 }
