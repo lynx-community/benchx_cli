@@ -15,7 +15,19 @@ config("mimalloc_private_config") {
   # overridden. mimalloc's own CMake sets this on the object target
   # (target_compile_definitions(mimalloc-obj PRIVATE MI_MALLOC_OVERRIDE)); we
   # mirror it here since we compile static.c directly.
-  defines = [ "MI_MALLOC_OVERRIDE=1" ]
+  #
+  # MI_DEBUG=0 + NDEBUG: the benchx_cli release is a debug build (is_debug
+  # defaults to true; the publish workflow doesn't set is_debug=false), so
+  # without this mimalloc inherits MI_DEBUG=2 (guard checks, alloc/free fill,
+  # asserts) and -O0. That turns it into a *slow* allocator — much slower than
+  # glibc's (always-optimized, in libc) malloc — and regressed the whole
+  # benchmark suite ~6x. Force the allocator itself to compile optimized and
+  # non-debug regardless of the surrounding build.
+  defines = [
+    "MI_MALLOC_OVERRIDE=1",
+    "MI_DEBUG=0",
+    "NDEBUG",
+  ]
 
   if (is_mac) {
     # On Linux a strong `malloc` in the executable shadows glibc's weak one
@@ -40,7 +52,13 @@ config("mimalloc_private_config") {
   # build/config/compiler/BUILD.gn), where that trips -Wtypedef-redefinition and
   # -Werror. Suppressing it matches the existing precedent in
   # patches/vulkan-loader (same warning, same fix).
+  #
+  # -O2: the toolchain emits -O0 for debug builds *before* these target cflags,
+  # so appending -O2 here wins and optimizes the allocator translation unit
+  # even though the rest of benchx_cli is built -O0. Without it the debug-build
+  # mimalloc is far slower than glibc malloc.
   cflags = [
+    "-O2",
     "-Wno-typedef-redefinition",
     "-Wno-unused-function",
     "-Wno-unused-variable",
