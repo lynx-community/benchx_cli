@@ -9,6 +9,14 @@ config("mimalloc_public_config") {
 }
 
 config("mimalloc_private_config") {
+  # MI_MALLOC_OVERRIDE is what makes alloc-override.c emit the strong `malloc`
+  # / `free` / `operator new` symbols that shadow glibc's (weak) ones — without
+  # it, static.c only produces the prefixed `mi_malloc` API and nothing is
+  # overridden. mimalloc's own CMake sets this on the object target
+  # (target_compile_definitions(mimalloc-obj PRIVATE MI_MALLOC_OVERRIDE)); we
+  # mirror it here since we compile static.c directly.
+  defines = [ "MI_MALLOC_OVERRIDE=1" ]
+
   # mimalloc builds the whole allocator from a single amalgamation unit
   # (src/static.c #includes the other src/*.c). It is third-party code, so
   # silence its warnings instead of patching them.
