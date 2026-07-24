@@ -1,0 +1,24 @@
+import("../../config.gni")
+
+config("codspeed_instrument_hooks_public_config") {
+  include_dirs = [
+    "./",
+    "./instrument-hooks/includes",
+  ]
+}
+
+config("codspeed_instrument_hooks_config") {
+  cflags = [
+    "-Wno-unused-variable",
+    "-Wno-incompatible-pointer-types",
+    "-O0",
+    "-g2",
+    "-UNVALGRIND",
+  ]
+}
+
+source_set("codspeed-instrument-hooks") {
+  configs += [ ":codspeed_instrument_hooks_config" ]
+  public_configs = [":codspeed_instrument_hooks_public_config"]
+  sources = []
+}
