@@ -1,0 +1,86 @@
+name: Periodic Rebase
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Daily at 00:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-rebase:
+    runs-on: ubuntu-latest
+    outputs:
+      temp_branch: ${{ steps.create_branch.outputs.branch_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Rebase Upstream and Push to Temp Branch
+        id: create_branch
+        run: |
+          UPSTREAM_URL="https://github.com/lynx-family/lynx.git"
+
+          echo "Setting upstream to $UPSTREAM_URL"
+          git remote add upstream "$UPSTREAM_URL"
+          git fetch upstream
+
+          echo "Rebasing develop..."
+          git checkout develop
+
+          if git rebase upstream/develop; then
+            echo "Rebase successful."
+            # Create a unique temporary branch name
+            TEMP_BRANCH="rebase-check-${{ github.run_id }}"
+            git checkout -b "$TEMP_BRANCH"
+            git push origin "$TEMP_BRANCH" --force
+            
+            echo "branch_name=$TEMP_BRANCH" >> "$GITHUB_OUTPUT"
+          else
+            echo "Rebase failed due to conflicts. Aborting."
+            git rebase --abort
+            exit 1
+          fi
+
+  check-build:
+    needs: prepare-rebase
+    uses: ./.github/workflows/benchx_cli_publish.yml
+    with:
+      skip_release: true
+      commit_ref: ${{ needs.prepare-rebase.outputs.temp_branch }}
+
+  push-to-develop:
+    needs: [prepare-rebase, check-build]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Checkout Temp Branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-rebase.outputs.temp_branch }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push to Develop
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          echo "Pushing verified rebase to develop..."
+          git checkout develop
+          # Reset develop to the verified temp branch commit
+          git reset --hard origin/${{ needs.prepare-rebase.outputs.temp_branch }}
+          git push origin develop --force-with-lease
+
+          # Cleanup
+          git push origin --delete ${{ needs.prepare-rebase.outputs.temp_branch }}
