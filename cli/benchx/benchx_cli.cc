@@ -9,6 +9,7 @@
 #include "base/threading/task_runner_manufactor.h"
 #include "base/trace/native/trace_controller.h"
 #include "cli/benchx/painting_context_platform_impl.h"
+#include "cli/benchx/performance_apis.h"
 #include "cli/benchx/resource_loader.h"
 #include "cli/benchx/tasm_platform_invoker_dummy.h"
 #include "core/shell/lynx_shell_builder.h"
@@ -102,6 +103,24 @@ int main(int argc, char** argv) {
 
     auto repeat = run_command.get<int32_t>("--repeat");
 
+    // Walltime needs many independent rounds to produce meaningful statistics
+    // (stdev/quantiles); simulation is deterministic so a single round is
+    // enough. The `bench:*` scripts are shared by both modes, so when the
+    // runner asks for walltime and the user didn't pin --repeat, default to a
+    // multi-round run. `repeat` is the target recorded round count per uri:
+    // fixed-fire cases reach it across that many runs, while harnesses that
+    // loop internally (tinybench) reach it in a single run and stop early via
+    // codspeed_walltime_saturated(). One extra run backfills the warmup sample
+    // the instrument discards per uri.
+    int32_t max_runs = repeat;
+    if (codspeed_walltime_active()) {
+      if (!run_command.is_used("--repeat")) {
+        repeat = 100;
+      }
+      codspeed_walltime_set_target_rounds(repeat);
+      max_runs = repeat + 1;
+    }
+
     auto wait_for_id = run_command.present("--wait-for-id");
     auto wait_time = run_command.present<int32_t>("--wait");
 
@@ -182,7 +201,7 @@ int main(int argc, char** argv) {
     auto runner = lynx::base::UIThread::GetRunner();
 
     std::thread([&]() {
-      for (int i = 0; i < repeat; ++i) {
+      for (int i = 0; i < max_runs; ++i) {
         lynx::shell::LynxShell* shell;
         runner->PostSyncTask([&]() { shell = run(); });
 
@@ -222,6 +241,12 @@ int main(int argc, char** argv) {
         }
 
         runner->PostSyncTask([&]() { delete shell; });
+
+        // Stop early once every benchmark has its target rounds (e.g. tinybench
+        // fills them in one run). No-op outside walltime mode.
+        if (codspeed_walltime_saturated()) {
+          break;
+        }
       }
 
       runner->PostSyncTask([&]() { runner->GetLoop()->Terminate(); });
