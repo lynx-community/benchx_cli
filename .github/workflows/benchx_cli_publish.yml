@@ -1,0 +1,253 @@
+name: Benchx CLI Publish
+
+on:
+  pull_request:
+    branches:
+      - develop
+  push:
+    tags:
+      - '*'
+  workflow_call:
+    inputs:
+      skip_release:
+        description: 'Skip the release job'
+        required: false
+        default: false
+        type: boolean
+      commit_ref:
+        description: 'Commit SHA or branch name to build'
+        required: false
+        type: string
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os_name }} ${{ matrix.arch_name }}
+    runs-on: ${{ matrix.os }}
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            os_name: Linux
+            arch_name: x86_64
+          - os: macos-latest
+            os_name: Darwin
+            arch_name: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.8
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Dependencies
+        run: |
+          # Configure sccache
+          echo "SCCACHE_DIR=$GITHUB_WORKSPACE/.sccache" >> $GITHUB_ENV
+          mkdir -p .sccache
+
+          # Show sccache stats before build
+          sccache -z
+
+          uv venv
+          uv pip install pip
+
+          # Ensure tools are executable
+          chmod +x tools/hab || true
+
+          # Source envsetup to set paths for hab and other tools
+          set +u
+          source tools/envsetup.sh
+
+          echo "Syncing dependencies..."
+          tools/hab sync .
+
+      - name: Build
+        run: |
+          set +u
+          source tools/envsetup.sh
+
+          echo "Generating build files for ${{ matrix.os_name }} ${{ matrix.arch_name }}..."
+
+          # Base args
+          ARGS='enable_unittests=true enable_trace="perfetto" jsengine_type="quickjs" enable_frozen_mode=true use_sccache=true'
+
+
+          # Platform specific args
+          if [[ "${{ matrix.os_name }}" == "Darwin" ]]; then
+            ARGS="$ARGS use_flutter_cxx=false"
+          fi
+
+          # Note: If cross-compilation is needed for arm64 on Linux, target_cpu arg would be needed
+          # But here we are running on native runners (macos-latest is arm64, others x64)
+
+          echo "GN Args: $ARGS"
+          gn gen --args="$ARGS" out/Default
+
+          echo "Building benchx_cli..."
+          ninja -C out/Default cli/benchx:benchx_cli
+
+          # Show sccache stats after build
+          sccache -s
+
+      - name: Verify benchx_cli
+        run: |
+          # Create temp directory
+          TEST_DIR=$(mktemp -d)
+          echo "Using temp dir: $TEST_DIR"
+
+          # 1. Download test bundle
+          curl -L -o "$TEST_DIR/GalleryComplete.lynx.bundle" https://unpkg.com/@lynx-example/gallery@0.6.7/dist/GalleryComplete.lynx.bundle
+
+          # 2. Run benchx_cli
+          out/Default/benchx_cli -o "$TEST_DIR/GalleryComplete.ptrace" run "$TEST_DIR/GalleryComplete.lynx.bundle" --wait 1000
+
+          # 3. Download trace_processor
+          # Download the downloader script
+          curl -L -o "$TEST_DIR/trace_processor" https://get.perfetto.dev/trace_processor
+          chmod +x "$TEST_DIR/trace_processor"
+
+          # 4. Verify trace content
+          # Write SQL query to a file to handle multiple symbols cleanly
+          # Using 'EOF' prevents shell expansion, making it safe for special characters
+          cat > "$TEST_DIR/verify_symbols.sql" <<'EOF'
+          SELECT name FROM slice WHERE
+            name GLOB 'LynxEngine::LoadTemplate'
+            OR name GLOB 'LynxShell::~LynxShell'
+            OR name GLOB 'ReactLynx::diff::*'
+          EOF
+
+          "$TEST_DIR/trace_processor" -q "$TEST_DIR/verify_symbols.sql" "$TEST_DIR/GalleryComplete.ptrace" > "$TEST_DIR/query_result.txt"
+
+          cat "$TEST_DIR/query_result.txt"
+
+          # Define expected symbols to check (one per line)
+          cat > "$TEST_DIR/expected_symbols.txt" <<'EOF'
+          LynxEngine::LoadTemplate
+          LynxShell::~LynxShell
+          ReactLynx::diff::
+          EOF
+
+          FAILED=0
+          while read -r SYMBOL; do
+            [[ -z "$SYMBOL" ]] && continue
+            if ! grep -qF "$SYMBOL" "$TEST_DIR/query_result.txt"; then
+              echo "Error: Missing expected symbol '$SYMBOL' in trace output"
+              FAILED=1
+            fi
+          done < "$TEST_DIR/expected_symbols.txt"
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo "Verification Failed: One or more expected symbols are missing."
+            exit 1
+          fi
+
+          echo "Verification Success: Found all expected symbols in trace."
+
+          # 5. Verify FiberElement Constructor/Destructor balance
+          # Ensure every FiberElement::Constructor has a matching FiberElement::Destructor
+          cat > "$TEST_DIR/verify_match.sql" <<'EOF'
+          SELECT
+            (SELECT COUNT(DISTINCT int_value) FROM args JOIN slice USING(arg_set_id)
+             WHERE slice.name = 'FiberElement::Constructor' AND key = 'debug.id') as constructed_unique,
+            (SELECT COUNT(DISTINCT int_value) FROM args JOIN slice USING(arg_set_id)
+             WHERE slice.name = 'FiberElement::Destructor' AND key = 'debug.id') as destroyed_unique,
+            (SELECT COUNT(*) FROM (
+               SELECT int_value FROM args JOIN slice USING(arg_set_id)
+               WHERE slice.name = 'FiberElement::Constructor' AND key = 'debug.id'
+               EXCEPT
+               SELECT int_value FROM args JOIN slice USING(arg_set_id)
+               WHERE slice.name = 'FiberElement::Destructor' AND key = 'debug.id'
+             )) as diff_count;
+          EOF
+
+          "$TEST_DIR/trace_processor" -q "$TEST_DIR/verify_match.sql" "$TEST_DIR/GalleryComplete.ptrace" > "$TEST_DIR/match_result.txt"
+
+          cat "$TEST_DIR/match_result.txt"
+
+          # Extract the counts from the last line (format: "constructed","destroyed","diff")
+          LAST_LINE=$(tail -n 1 "$TEST_DIR/match_result.txt")
+          CONSTRUCTED=$(echo "$LAST_LINE" | cut -d',' -f1)
+          DESTROYED=$(echo "$LAST_LINE" | cut -d',' -f2)
+          DIFF=$(echo "$LAST_LINE" | cut -d',' -f3)
+
+          echo "Constructed: $CONSTRUCTED, Destroyed: $DESTROYED, Diff: $DIFF"
+
+          # Verify that we have some constructions, and diff is 0
+          if [ "$DIFF" == "0" ] && [ "$CONSTRUCTED" -gt 0 ]; then
+             echo "Verification Success: FiberElement Constructor/Destructor are balanced ($CONSTRUCTED objects)."
+          else
+             echo "Verification Failed: FiberElement imbalance or missing (Diff: $DIFF, Constructed: $CONSTRUCTED)."
+             exit 1
+          fi
+
+          # Cleanup
+          rm -rf "$TEST_DIR"
+
+      - name: Prepare and Package Artifacts
+        run: |
+          mkdir -p dist/bin
+          BINARY_PATH="out/Default/benchx_cli"
+
+          if [ ! -f "$BINARY_PATH" ]; then
+            echo "Error: Binary not found at $BINARY_PATH"
+            ls -R out/Default
+            exit 1
+          fi
+
+          echo "Found binary at $BINARY_PATH"
+          cp "$BINARY_PATH" dist/bin/benchx_cli
+
+          # Create archive with specific naming format: benchx_cli_OS_Arch.tar.gz
+          # e.g., benchx_cli_Darwin_arm64.tar.gz
+          ARCHIVE_NAME="benchx_cli_${{ matrix.os_name }}_${{ matrix.arch_name }}.tar.gz"
+
+          cd dist/bin
+          tar -czvf "../../$ARCHIVE_NAME" benchx_cli
+          cd ../..
+
+          echo "Created archive: $ARCHIVE_NAME"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact-${{ matrix.os_name }}-${{ matrix.arch_name }}
+          path: benchx_cli_*.tar.gz
+
+  release:
+    name: Create Release
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && !inputs.skip_release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true # Merge all artifacts into one directory
+
+      - name: List Artifacts
+        run: |
+          ls -R artifacts
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
