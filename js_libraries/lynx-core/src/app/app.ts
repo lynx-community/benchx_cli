@@ -537,7 +537,7 @@ export abstract class BaseApp<
       );
     }
     try {
-      this.lynx.performance.profileStart(TraceEventDef.EXECUTE_LOADED_SCRIPT, {
+      this.lynx.performance._profileStart(TraceEventDef.EXECUTE_LOADED_SCRIPT, {
         args: { path },
       });
       const ret = factory<T>({ tt: this });
@@ -551,7 +551,7 @@ export abstract class BaseApp<
 
       return ret;
     } finally {
-      this.lynx.performance.profileEnd();
+      this.lynx.performance._profileEnd();
     }
   }
 
