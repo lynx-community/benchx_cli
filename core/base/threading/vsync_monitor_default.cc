@@ -9,8 +9,16 @@
 namespace lynx {
 namespace base {
 
+class VSyncMonitorDummy : public VSyncMonitor {
+ public:
+  VSyncMonitorDummy() = default;
+  ~VSyncMonitorDummy() override = default;
+
+  void RequestVSync() override {};
+};
+
 std::shared_ptr<VSyncMonitor> VSyncMonitor::Create(bool is_on_ui_thread) {
-  return nullptr;
+  return std::make_shared<VSyncMonitorDummy>();
 }
 
 }  // namespace base

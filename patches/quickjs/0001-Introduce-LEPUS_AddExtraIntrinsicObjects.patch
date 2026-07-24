@@ -1,0 +1,36 @@
+From cbceced2576857f1896294e33f244aa3342d88bd Mon Sep 17 00:00:00 2001
+From: "hongzhiyuan.hzy" <hongzhiyuan.hzy@bytedance.com>
+Date: Wed, 11 Feb 2026 01:07:10 +0800
+Subject: [PATCH] Introduce LEPUS_AddExtraIntrinsicObjects
+
+---
+ src/interpreter/quickjs/source/quickjs.cc | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/interpreter/quickjs/source/quickjs.cc b/src/interpreter/quickjs/source/quickjs.cc
+index 260ad2d..b49638f 100644
+--- a/src/interpreter/quickjs/source/quickjs.cc
++++ b/src/interpreter/quickjs/source/quickjs.cc
+@@ -1889,6 +1889,10 @@ QJS_STATIC void JS_AddIntrinsicWeakRef(LEPUSContext *ctx);
+ QJS_STATIC void JS_AddIntrinsicFinalizationRegistry(LEPUSContext *ctx);
+ QJS_STATIC void JS_AddIntrinsicBigInt(LEPUSContext *ctx);
+ 
++extern "C" {
++void LEPUS_AddExtraIntrinsicObjects(LEPUSContext *ctx);
++}
++
+ LEPUSContext *LEPUS_NewContext(LEPUSRuntime *rt) {
+   CallGCFunc(JS_NewContext_GC, rt);
+   LEPUSContext *ctx;
+@@ -1911,6 +1915,8 @@ LEPUSContext *LEPUS_NewContext(LEPUSRuntime *rt) {
+   JS_AddIntrinsicWeakRef(ctx);
+   JS_AddIntrinsicFinalizationRegistry(ctx);
+ 
++  LEPUS_AddExtraIntrinsicObjects(ctx);
++
+   return ctx;
+ }
+ 
+-- 
+2.39.5
+
