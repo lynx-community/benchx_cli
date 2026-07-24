@@ -1,0 +1,87 @@
+From 0842a13b8f3f1bb96722d94a3677260b2b465322 Mon Sep 17 00:00:00 2001
+From: Bot <bot@example.com>
+Date: Wed, 11 Feb 2026 00:17:31 +0800
+Subject: [PATCH 1/2] Disable strip
+
+---
+ toolchain/linux/BUILD.gn | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/toolchain/linux/BUILD.gn b/toolchain/linux/BUILD.gn
+index 37e0869..31bc5fe 100644
+--- a/toolchain/linux/BUILD.gn
++++ b/toolchain/linux/BUILD.gn
+@@ -48,7 +48,7 @@ gcc_toolchain("clang_x86") {
+   nm = "${prefix}/llvm-nm"
+   ar = "${prefix}/llvm-ar"
+   ld = cxx
+-  llvm_objcopy = "${prefix}/llvm-objcopy"
++  # llvm_objcopy = "${prefix}/llvm-objcopy"
+ 
+   toolchain_cpu = "x86"
+   toolchain_os = "linux"
+@@ -64,7 +64,7 @@ gcc_toolchain("x86") {
+   nm = "${prefix}nm"
+   ar = "${prefix}ar"
+   ld = cxx
+-  strip = "${prefix}strip"
++  # strip = "${prefix}strip"
+ 
+   toolchain_cpu = "x86"
+   toolchain_os = "linux"
+@@ -85,7 +85,7 @@ gcc_toolchain("clang_x64") {
+   nm = "${prefix}/llvm-nm"
+   ar = "${prefix}/llvm-ar"
+   ld = cxx
+-  llvm_objcopy = "${prefix}/llvm-objcopy"
++  # llvm_objcopy = "${prefix}/llvm-objcopy"
+ 
+   toolchain_cpu = "x64"
+   toolchain_os = "linux"
+@@ -106,7 +106,7 @@ gcc_toolchain("clang_arm64") {
+   nm = "${prefix}/llvm-nm"
+   ar = "${prefix}/llvm-ar"
+   ld = cxx
+-  llvm_objcopy = "${prefix}/llvm-objcopy"
++  # llvm_objcopy = "${prefix}/llvm-objcopy"
+ 
+   toolchain_cpu = "arm64"
+   toolchain_os = "linux"
+@@ -122,7 +122,7 @@ gcc_toolchain("x64") {
+   nm = "${prefix}nm"
+   ar = "${prefix}ar"
+   ld = cxx
+-  strip = "${prefix}strip"
++  # strip = "${prefix}strip"
+ 
+   toolchain_cpu = "x64"
+   toolchain_os = "linux"
+-- 
+2.39.5
+
+
+From 68f375eaacf9c31f9e6db166012fd9f1b0ac3a68 Mon Sep 17 00:00:00 2001
+From: Bot <bot@example.com>
+Date: Wed, 11 Feb 2026 00:32:25 +0800
+Subject: [PATCH 2/2] Enable gc-sections for Linux
+
+---
+ config/compiler/BUILD.gn | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/config/compiler/BUILD.gn b/config/compiler/BUILD.gn
+index 855c10a..c38dceb 100644
+--- a/config/compiler/BUILD.gn
++++ b/config/compiler/BUILD.gn
+@@ -416,6 +416,8 @@ config("compiler") {
+   # Linux/Android common flags setup.
+   # ---------------------------------
+   if (is_linux || is_android || is_harmony) {
++    cflags += ["-ffunction-sections", "-fdata-sections"]
++    ldflags += ["-Wl,--gc-sections"]
+     cflags += [
+       "-fPIC",
+       "-pipe",  # Use pipes for communicating between sub-processes. Faster.
+-- 
+2.39.5
+
