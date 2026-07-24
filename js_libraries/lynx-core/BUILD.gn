@@ -1,0 +1,22 @@
+# Copyright 20205The Lynx Authors. All rights reserved.
+# Licensed under the Apache License Version 2.0 that can be found in the
+# LICENSE file in the root directory of this source tree.
+
+import("//core/Lynx.gni")
+
+config("lynx_core_public_config") {
+  include_dirs = [
+    "./output",
+  ]
+}
+
+source_set("lynx-core") {
+  exec_script("../../tools/js_tools/build.py", ["--platform", "android"])
+
+  public_configs = [ ":lynx_core_public_config" ]
+
+  sources = [
+    "output/js_libraries/lynx_core.h",
+    "output/js_libraries/lynx_core_dev.h",
+  ]
+}
