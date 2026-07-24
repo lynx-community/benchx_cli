@@ -29,6 +29,10 @@ executable("benchx_cli") {
     "//js_libraries/lynx-core",
     "//third_party/argparse",
     "//third_party/codspeed-instrument-hooks",
+    # mimalloc overrides the system allocator to cut allocator-induced timing
+    # variance in the CodSpeed benchmarks (e.g. glibc malloc_consolidate spikes
+    # in simulation profiles). Benchmarks only run on Linux/macOS.
+    "//third_party/mimalloc",
     "//third_party/rapidjson",
   ]
 }
