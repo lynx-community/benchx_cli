@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/include/fml/thread.h"
+#include "base/threading/task_runner_manufactor.h"
 #include "core/renderer/utils/lynx_env.h"
 #include "core/services/event_report/event_tracker.h"
 
@@ -70,10 +71,14 @@ class EventTrackerPlatformImpl {
   static void ClearCache(int32_t instance_id);
   // Get Task Runner of report thread.
   static fml::RefPtr<fml::TaskRunner> GetReportTaskRunner() {
+#if LYNX_ENABLE_FROZEN_MODE
+    return base::UIThread::GetRunner();
+#else
     static base::NoDestructor<fml::Thread> event_report_thread_t_(
         fml::Thread::ThreadConfig(
             kLynxReportThread, fml::Thread::ThreadPriority::NORMAL, nullptr));
     return event_report_thread_t_->GetTaskRunner();
+#endif
   }
 };
 
