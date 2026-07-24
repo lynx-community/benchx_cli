@@ -1,0 +1,14 @@
+import("../../config.gni")
+
+config("argparse_public_config") {
+  include_dirs = [
+    "./src/include",
+  ]
+}
+
+source_set("argparse") {
+  public_configs = [ ":argparse_public_config" ]
+  sources = [
+    "./src/include/argparse/argparse.hpp"
+  ]
+}
