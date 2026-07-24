@@ -71,3 +71,8 @@ group("third_party_trace_group") {
     deps += [ "base/trace/native:trace_tests" ]
   }
 }
+
+group("cli") {
+  deps = ["cli/benchx:benchx_cli"]
+  testonly = true
+}
