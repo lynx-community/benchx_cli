@@ -47,6 +47,18 @@ def build(platform, releaseOutput, devOutput, version):
             ['pnpm', '--filter', f'@lynx-js/lynx-core', f'build:{platform}'],
             os.getcwd(), env)
 
+        subprocess.run(
+            ['mkdir', '-p', 'js_libraries'],
+            cwd=outputPath)
+        subprocess.run(
+            ['xxd -i lynx_core.js > js_libraries/lynx_core.h'],
+            cwd=outputPath,
+            shell=True)
+        subprocess.run(
+            ['xxd -i lynx_core_dev.js > js_libraries/lynx_core_dev.h'],
+            cwd=outputPath,
+            shell=True)
+
         # Copy lynx_core.js if releaseOutput is provided
         if releaseOutput:
             releaseDir = os.path.dirname(releaseOutput)
