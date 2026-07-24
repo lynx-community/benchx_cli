@@ -324,6 +324,12 @@ deps = {
         'commit': '3eda91b2e1ce7d569f84ba295507c4cd8fd96910',
         "ignore_in_git": True,
     },
+    "third_party/mimalloc/mimalloc": {
+        'type': 'git',
+        'url': 'https://github.com/microsoft/mimalloc.git',
+        'commit': '30b2d9d89099bee08e9f67a1ffb3e12e7ba45227',  # v3.3.2
+        "ignore_in_git": True,
+    },
     'buildtools/corepack/pnpm/7.33.6': {
         "type": "http",
         "url": "https://registry.npmjs.org/pnpm/-/pnpm-7.33.6.tgz",
