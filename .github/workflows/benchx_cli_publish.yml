@@ -86,8 +86,11 @@ jobs:
 
           echo "Generating build files for ${{ matrix.os_name }} ${{ matrix.arch_name }}..."
 
-          # Base args
-          ARGS='enable_unittests=true enable_trace="perfetto" jsengine_type="quickjs" enable_frozen_mode=true use_sccache=true'
+          # Base args. is_debug=false builds release (GN defaults it true -> the
+          # whole binary is -O0); symbol_level=1 is explicit because release
+          # Linux defaults it to 0, which would strip the symbols CodSpeed/
+          # valgrind need. enable_trace stays perfetto (independent of is_debug).
+          ARGS='is_debug=false symbol_level=1 enable_unittests=true enable_trace="perfetto" jsengine_type="quickjs" enable_frozen_mode=true use_sccache=true'
 
 
           # Platform specific args
