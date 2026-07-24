@@ -27,7 +27,7 @@ function android_env_setup() {
   local SCRIPT_REAL_PATH=$(posix_absolute_path $1)
   local TOOLS_REAL_PATH=$(dirname $SCRIPT_REAL_PATH)
   echo $TOOLS_REAL_PATH
-  if [ "$ANDROID_HOME" ]; then
+  if [ "${ANDROID_HOME:-}" ]; then
     local android_sdk="${ANDROID_SDK:-$ANDROID_HOME}"
     local android_ndk
     local ndk_property=()

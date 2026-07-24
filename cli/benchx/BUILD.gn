@@ -1,0 +1,34 @@
+# Copyright 2020 The Lynx Authors. All rights reserved.
+# Licensed under the Apache License Version 2.0 that can be found in the
+# LICENSE file in the root directory of this source tree.
+
+import("//core/Lynx.gni")
+import("//testing/test.gni")
+
+executable("benchx_cli") {
+  testonly = true
+  sources = [
+    "benchx_cli.cc",
+    "painting_context_platform_impl.cc",
+    "performance_apis.cc",
+    "resource_loader.cc",
+    "tasm_platform_invoker_dummy.cc",
+  ]
+  deps = [
+    "//base/src:base_group",
+    "//base/trace/native:trace",
+    "//core/event",
+    "//core/renderer:tasm",
+    "//core/renderer/dom:dom",
+    "//core/renderer/dom:renderer_dom",
+    "//core/renderer/dom/selector:element_selector",
+    "//core/resource",
+    "//core/services/event_report",
+    "//core/shared_data",
+    "//core/shell",
+    "//js_libraries/lynx-core",
+    "//third_party/argparse",
+    "//third_party/codspeed-instrument-hooks",
+    "//third_party/rapidjson",
+  ]
+}
