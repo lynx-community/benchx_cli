@@ -14,6 +14,13 @@ executable("benchx_cli") {
     "resource_loader.cc",
     "tasm_platform_invoker_dummy.cc",
   ]
+
+  # build/config defines NVALGRIND for every non-tsan build, which turns the
+  # callgrind client requests in performance_apis.cc into no-ops -> the compiler
+  # then strips the whole simulation path as dead code and no benchmark regions
+  # are dumped under `codspeed run --mode simulation`. Undefine it here so the
+  # CodSpeed callgrind markers survive the optimized (is_debug=false) build.
+  cflags = [ "-UNVALGRIND" ]
   deps = [
     "//base/src:base_group",
     "//base/trace/native:trace",
