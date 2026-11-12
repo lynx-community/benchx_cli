@@ -35,8 +35,17 @@ inline __attribute__((always_inline)) void callgrind_start_instrumentation() { C
 inline __attribute__((always_inline)) void callgrind_stop_instrumentation() { CALLGRIND_STOP_INSTRUMENTATION; }
 // clang-format on
 
+// RUNNING_ON_VALGRIND can return 0 even under valgrind in an optimized (-O2)
+// build, so also honour CODSPEED_RUNNER_MODE (env, robust under -O2 like the
+// walltime path). Callgrind dumps are no-ops when not actually under valgrind.
+static bool codspeed_mode_is_simulation() {
+  const char* mode = std::getenv("CODSPEED_RUNNER_MODE");
+  return mode != nullptr
+      && (std::string(mode) == "simulation" || std::string(mode) == "instrumentation");
+}
+
 static bool is_running_on_valgrind = []() {
-  if (running_on_valgrind()) {
+  if (running_on_valgrind() || codspeed_mode_is_simulation()) {
     callgrind_dump_stats_at((const uint8_t*)"Metadata: codspeed-cpp 1.2.0");
     return true;
   }
